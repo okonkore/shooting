@@ -14,7 +14,6 @@ var score := 0
 var wave := 1
 var player_damage := 1
 var fire_interval := 0.32
-var projectile_count := 1
 var shot_width := 4.0
 var upgrade_open := false
 var upgrade_choices: Array[Dictionary] = []
@@ -51,7 +50,6 @@ func begin() -> void:
 	wave = 1
 	player_damage = 1
 	fire_interval = 0.32
-	projectile_count = 1
 	shot_width = 4.0
 	upgrade_open = false
 	player_x = W / 2.0
@@ -113,17 +111,15 @@ func advance_shots(delta: float) -> void:
 		spawn_wave()
 
 func shoot() -> void:
-	for i in projectile_count:
-		var offset := (i - (projectile_count - 1) / 2.0) * 13.0
-		shots.append({"pos": Vector2(player_x + offset, PLAYER_Y - 24)})
+	shots.append({"pos": Vector2(player_x, PLAYER_Y - 24)})
 
 func open_upgrades() -> void:
 	var pool: Array[Dictionary] = [
 		{"id": "damage", "title": "攻撃細胞", "text": "弾丸のダメージ +1"},
 		{"id": "rapid", "title": "高速分裂", "text": "発射間隔を 18% 短縮"},
-		{"id": "multi", "title": "多重核", "text": "同時発射数 +1"},
+		{"id": "multi", "title": "多重核", "text": "連射速度を 30% 強化"},
 		{"id": "pulse", "title": "細胞パルス", "text": "弾丸の幅 +4"},
-		{"id": "overload", "title": "過剰分裂", "text": "発射数 +2"}
+		{"id": "overload", "title": "過剰分裂", "text": "連射速度を 45% 強化"}
 	]
 	pool.shuffle()
 	upgrade_choices = [pool[0], pool[1], pool[2]]
@@ -134,9 +130,9 @@ func choose_upgrade(index: int) -> void:
 	match upgrade.id:
 		"damage": player_damage += 1
 		"rapid": fire_interval = max(0.09, fire_interval * 0.82)
-		"multi": projectile_count += 1
+		"multi": fire_interval = max(0.07, fire_interval * 0.70)
 		"pulse": shot_width += 4.0
-		"overload": projectile_count += 2
+		"overload": fire_interval = max(0.07, fire_interval * 0.55)
 	upgrade_open = false
 
 func _input(event: InputEvent) -> void:
@@ -148,21 +144,21 @@ func _input(event: InputEvent) -> void:
 				choose_upgrade_at(event.position * W / get_viewport_rect().size.x)
 			else:
 				touch_active = true
-				target_x = event.position.x * W / get_viewport_rect().size.x
 		else:
 			touch_active = false
 	elif event is InputEventScreenDrag and started and not game_over:
-		target_x = event.position.x * W / get_viewport_rect().size.x
+		if not upgrade_open:
+			target_x = clamp(target_x + event.relative.x * W / get_viewport_rect().size.x, 28.0, W - 28.0)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if not started or game_over:
 			begin()
 		elif upgrade_open:
 			choose_upgrade_at(event.position * W / get_viewport_rect().size.x)
 		else:
-			target_x = event.position.x * W / get_viewport_rect().size.x
+			touch_active = true
 	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and started and not game_over:
 		if not upgrade_open:
-			target_x = event.position.x * W / get_viewport_rect().size.x
+			target_x = clamp(target_x + event.relative.x * W / get_viewport_rect().size.x, 28.0, W - 28.0)
 
 func choose_upgrade_at(p: Vector2) -> void:
 	for i in upgrade_choices.size():
