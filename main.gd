@@ -10,8 +10,17 @@ var game_over := false
 var player_x := W / 2.0
 var target_x := W / 2.0
 var health := 3
+var max_health := 3
 var score := 0
 var wave := 1
+var level := 1
+var xp := 0
+var next_xp := 18
+var player_damage := 1
+var fire_interval := 0.32
+var projectile_count := 1
+var upgrade_open := false
+var upgrade_choices: Array[Dictionary] = []
 var enemies: Array[Dictionary] = []
 var shots: Array[Dictionary] = []
 var enemy_shots: Array[Dictionary] = []
@@ -35,25 +44,34 @@ func spawn_wave() -> void:
 	var rows := mini(5, 3 + wave / 2)
 	for row in rows:
 		for column in 7:
-			enemies.append({"pos": Vector2(58 + column * 52, 130 + row * 46), "kind": row % 3})
+			var durability := 2 + row + wave / 2
+			enemies.append({"pos": Vector2(58 + column * 52, 130 + row * 46), "kind": row % 3, "hp": durability, "max_hp": durability, "xp": 2 + row})
 
 func begin() -> void:
 	started = true
 	game_over = false
 	health = 3
+	max_health = 3
 	score = 0
 	wave = 1
+	level = 1
+	xp = 0
+	next_xp = 18
+	player_damage = 1
+	fire_interval = 0.32
+	projectile_count = 1
+	upgrade_open = false
 	player_x = W / 2.0
 	target_x = player_x
 	spawn_wave()
 
 func _process(delta: float) -> void:
-	if started and not game_over:
+	if started and not game_over and not upgrade_open:
 		player_x = move_toward(player_x, clamp(target_x, 28.0, W - 28.0), 460.0 * delta)
 		shot_clock -= delta
 		if shot_clock <= 0.0:
-			shots.append({"pos": Vector2(player_x, PLAYER_Y - 24)})
-			shot_clock = 0.32
+			shoot()
+			shot_clock = fire_interval
 		advance_invaders(delta)
 		advance_shots(delta)
 	queue_redraw()
@@ -95,9 +113,12 @@ func advance_shots(delta: float) -> void:
 	for shot in shots:
 		for enemy in enemies:
 			if enemy not in dead and shot.pos.distance_to(enemy.pos) < 24.0:
-				dead.append(enemy)
+				enemy.hp -= player_damage
 				shot.pos.y = -100.0
-				score += 10
+				if enemy.hp <= 0:
+					dead.append(enemy)
+					score += 10
+					gain_xp(enemy.xp)
 	if not dead.is_empty():
 		for enemy in dead:
 			enemies.erase(enemy)
@@ -108,6 +129,43 @@ func advance_shots(delta: float) -> void:
 	if enemies.is_empty():
 		wave += 1
 		spawn_wave()
+
+func shoot() -> void:
+	for i in projectile_count:
+		var offset := (i - (projectile_count - 1) / 2.0) * 13.0
+		shots.append({"pos": Vector2(player_x + offset, PLAYER_Y - 24)})
+
+func gain_xp(amount: int) -> void:
+	xp += amount
+	if xp >= next_xp:
+		xp -= next_xp
+		level += 1
+		next_xp = int(next_xp * 1.35) + 4
+		open_upgrades()
+
+func open_upgrades() -> void:
+	var pool: Array[Dictionary] = [
+		{"id": "damage", "title": "攻撃細胞", "text": "弾丸のダメージ +1"},
+		{"id": "rapid", "title": "高速分裂", "text": "発射間隔を 18% 短縮"},
+		{"id": "multi", "title": "多重核", "text": "同時発射数 +1"},
+		{"id": "repair", "title": "自己修復", "text": "HPを 1 回復"},
+		{"id": "vital", "title": "強靭な膜", "text": "最大HP +1、HPも回復"}
+	]
+	pool.shuffle()
+	upgrade_choices = [pool[0], pool[1], pool[2]]
+	upgrade_open = true
+
+func choose_upgrade(index: int) -> void:
+	var upgrade: Dictionary = upgrade_choices[index]
+	match upgrade.id:
+		"damage": player_damage += 1
+		"rapid": fire_interval = max(0.09, fire_interval * 0.82)
+		"multi": projectile_count += 1
+		"repair": health = min(max_health, health + 1)
+		"vital":
+			max_health += 1
+			health = max_health
+	upgrade_open = false
 
 func lose_life() -> void:
 	health -= 1
@@ -120,6 +178,8 @@ func _input(event: InputEvent) -> void:
 		if event.pressed:
 			if not started or game_over:
 				begin()
+			elif upgrade_open:
+				choose_upgrade_at(event.position * W / get_viewport_rect().size.x)
 			else:
 				touch_active = true
 				target_x = event.position.x * W / get_viewport_rect().size.x
@@ -130,10 +190,20 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if not started or game_over:
 			begin()
+		elif upgrade_open:
+			choose_upgrade_at(event.position * W / get_viewport_rect().size.x)
 		else:
 			target_x = event.position.x * W / get_viewport_rect().size.x
 	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and started and not game_over:
-		target_x = event.position.x * W / get_viewport_rect().size.x
+		if not upgrade_open:
+			target_x = event.position.x * W / get_viewport_rect().size.x
+
+func choose_upgrade_at(p: Vector2) -> void:
+	for i in upgrade_choices.size():
+		var card := Rect2(42, 285 + i * 86, W - 84, 70)
+		if card.has_point(p):
+			choose_upgrade(i)
+			return
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, Vector2(W, H)), Color("07151b"))
@@ -142,14 +212,16 @@ func _draw() -> void:
 	for y in range(0, int(H), 43):
 		draw_line(Vector2(0, y), Vector2(W, y), Color("12363b"), 1.0)
 	draw_string(GAME_FONT, Vector2(20, 35), "CELL INVADER", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("a6ffcf"))
-	draw_string(GAME_FONT, Vector2(20, 61), "SCORE %05d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
+	draw_string(GAME_FONT, Vector2(20, 61), "SCORE %05d  LV.%d" % [score, level], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
 	draw_string(GAME_FONT, Vector2(305, 61), "WAVE %02d" % wave, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
+	draw_rect(Rect2(20, 72, 190, 7), Color("17353a"))
+	draw_rect(Rect2(20, 72, 190.0 * float(xp) / next_xp, 7), Color("70eab8"))
 	for heart in health:
 		draw_circle(Vector2(365 + heart * 18, 28), 6, Color("ff6f91"))
 	if started:
 		draw_player()
 		for enemy in enemies:
-			draw_enemy(enemy.pos, int(enemy.kind))
+			draw_enemy(enemy)
 		for shot in shots:
 			draw_rect(Rect2(shot.pos - Vector2(2, 12), Vector2(4, 15)), Color("f5f899"))
 		for shot in enemy_shots:
@@ -162,6 +234,8 @@ func _draw() -> void:
 		draw_panel("CULTURE LOST", "SCORE %d  /  WAVE %d" % [score, wave], "画面をタップしてリトライ")
 	else:
 		draw_string(GAME_FONT, Vector2(70, 742), "画面を横にドラッグして移動", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("79a59d"))
+	if upgrade_open:
+		draw_upgrade_panel()
 
 func draw_player() -> void:
 	var p := Vector2(player_x, PLAYER_Y)
@@ -169,13 +243,30 @@ func draw_player() -> void:
 	draw_colored_polygon(ship, Color("77f6be"))
 	draw_circle(p + Vector2(0, 3), 7, Color("e8fff4"))
 
-func draw_enemy(p: Vector2, kind: int) -> void:
+func draw_enemy(enemy: Dictionary) -> void:
+	var p: Vector2 = enemy.pos
+	var kind: int = enemy.kind
 	var colors := [Color("ff7498"), Color("ffcf6d"), Color("9b8cff")]
 	var c: Color = colors[kind]
 	draw_circle(p, 17, c)
 	draw_circle(p + Vector2(-6, -2), 3, Color("07151b"))
 	draw_circle(p + Vector2(6, -2), 3, Color("07151b"))
 	draw_line(p + Vector2(-7, 7), p + Vector2(7, 7), Color("07151b"), 2)
+	draw_rect(Rect2(p.x - 17, p.y - 27, 34, 4), Color("351d28"))
+	draw_rect(Rect2(p.x - 17, p.y - 27, 34.0 * float(enemy.hp) / enemy.max_hp, 4), Color("aaffca"))
+
+func draw_upgrade_panel() -> void:
+	draw_rect(Rect2(18, 185, W - 36, 410), Color("07151bf2"))
+	draw_rect(Rect2(18, 185, W - 36, 410), Color("71eab9"), false, 2)
+	draw_string(GAME_FONT, Vector2(86, 235), "CELL EVOLUTION", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color("b8ffda"))
+	draw_string(GAME_FONT, Vector2(93, 264), "強化をひとつ選択", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("c3d8d2"))
+	for i in upgrade_choices.size():
+		var card := Rect2(42, 285 + i * 86, W - 84, 70)
+		draw_rect(card, Color("16373a"))
+		draw_rect(card, Color("4ba881"), false, 1)
+		var choice: Dictionary = upgrade_choices[i]
+		draw_string(GAME_FONT, card.position + Vector2(14, 28), "%d. %s" % [i + 1, choice.title], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("d0ffe4"))
+		draw_string(GAME_FONT, card.position + Vector2(14, 51), choice.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("a7cbc1"))
 
 func draw_panel(title: String, text: String, action: String) -> void:
 	draw_rect(Rect2(22, 258, W - 44, 210), Color("07151be8"))
