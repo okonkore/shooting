@@ -16,6 +16,7 @@ var player_damage := 1
 var fire_interval := 0.32
 var shot_width := 4.0
 var burst_count := 1
+var horizontal_shot_count := 1
 var pending_bursts: Array[float] = []
 var upgrade_open := false
 var upgrade_choices: Array[Dictionary] = []
@@ -54,6 +55,7 @@ func begin() -> void:
 	fire_interval = 0.32
 	shot_width = 4.0
 	burst_count = 1
+	horizontal_shot_count = 1
 	pending_bursts.clear()
 	upgrade_open = false
 	player_x = W / 2.0
@@ -121,7 +123,9 @@ func shoot() -> void:
 		pending_bursts.append(float(i) * 0.08)
 
 func emit_shot() -> void:
-	shots.append({"pos": Vector2(player_x, PLAYER_Y - 24)})
+	for i in horizontal_shot_count:
+		var offset := (i - (horizontal_shot_count - 1) / 2.0) * 16.0
+		shots.append({"pos": Vector2(player_x + offset, PLAYER_Y - 24)})
 
 func advance_pending_bursts(delta: float) -> void:
 	for i in pending_bursts.size():
@@ -135,6 +139,7 @@ func open_upgrades() -> void:
 		{"id": "damage", "title": "攻撃細胞", "text": "弾丸のダメージ +1"},
 		{"id": "rapid", "title": "高速分裂", "text": "発射間隔を 18% 短縮"},
 		{"id": "multi", "title": "多重核", "text": "1回の発射に追撃弾 +1"},
+		{"id": "split", "title": "横分裂", "text": "同時発射を横方向に +1"},
 		{"id": "pulse", "title": "細胞パルス", "text": "弾丸の幅 +4"},
 		{"id": "overload", "title": "過剰分裂", "text": "連射速度を 45% 強化"}
 	]
@@ -148,6 +153,7 @@ func choose_upgrade(index: int) -> void:
 		"damage": player_damage += 1
 		"rapid": fire_interval = max(0.09, fire_interval * 0.82)
 		"multi": burst_count += 1
+		"split": horizontal_shot_count += 1
 		"pulse": shot_width += 4.0
 		"overload": fire_interval = max(0.07, fire_interval * 0.55)
 	upgrade_open = false
