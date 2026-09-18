@@ -26,6 +26,7 @@ var upgrade_choices: Array[Dictionary] = []
 var press_active := false
 var press_elapsed := 0.0
 var gesture_moved := false
+var last_touch_msec := 0
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -59,6 +60,9 @@ func begin() -> void:
 	cell_respawn_delay = 4.5
 	player_x = W / 2.0
 	target_x = player_x
+	press_active = false
+	press_elapsed = 0.0
+	gesture_moved = false
 	setup_stage()
 
 func _process(delta: float) -> void:
@@ -100,7 +104,7 @@ func advance_shots(delta: float) -> void:
 				if core_hp <= 0:
 					stage += 1
 					setup_stage()
-		if hit and not shot.charged:
+		if hit:
 			shot.pos.y = -100.0
 
 func destroy_cell(enemy: Dictionary) -> void:
@@ -157,6 +161,7 @@ func release_press() -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
+		last_touch_msec = Time.get_ticks_msec()
 		if event.pressed:
 			if not started or game_over:
 				begin()
@@ -171,7 +176,9 @@ func _input(event: InputEvent) -> void:
 		target_x = clamp(target_x + delta_x, 28.0, W - 28.0)
 		if abs(delta_x) > 1.0:
 			gesture_moved = true
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			press_active = false
+			press_elapsed = 0.0
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and Time.get_ticks_msec() - last_touch_msec > 800:
 		if event.pressed:
 			if not started or game_over:
 				begin()
@@ -181,11 +188,13 @@ func _input(event: InputEvent) -> void:
 				start_press()
 		else:
 			release_press()
-	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and started and not game_over and not upgrade_open:
+	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and started and not game_over and not upgrade_open and Time.get_ticks_msec() - last_touch_msec > 800:
 		var mouse_delta_x: float = event.relative.x * W / get_viewport_rect().size.x
 		target_x = clamp(target_x + mouse_delta_x, 28.0, W - 28.0)
 		if abs(mouse_delta_x) > 1.0:
 			gesture_moved = true
+			press_active = false
+			press_elapsed = 0.0
 
 func choose_upgrade_at(p: Vector2) -> void:
 	for i in upgrade_choices.size():
