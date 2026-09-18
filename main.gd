@@ -3,7 +3,6 @@ extends Node2D
 const W := 430.0
 const H := 760.0
 const PLAYER_Y := 675.0
-const BREACH_LINE := 600.0
 const GAME_FONT: Font = preload("res://assets/NotoSansJP-Regular.otf")
 
 var started := false
@@ -15,18 +14,15 @@ var score := 0
 var stage := 1
 var player_damage := 1
 var horizontal_shots := 1
-var charge_multiplier := 3
-var charge_radius := 22.0
+var charge_multiplier := 8
+var charge_radius := 32.0
 var cell_respawn_delay := 4.5
 var core_hp := 0
 var core_max_hp := 0
 var core_armor := 0
 var enemies: Array[Dictionary] = []
 var shots: Array[Dictionary] = []
-var items: Array[Dictionary] = []
 var upgrade_choices: Array[Dictionary] = []
-var enemy_direction := 1.0
-var enemy_step_clock := 0.0
 var press_active := false
 var press_elapsed := 0.0
 var gesture_moved := false
@@ -40,17 +36,15 @@ func _ready() -> void:
 func setup_stage() -> void:
 	enemies.clear()
 	shots.clear()
-	items.clear()
-	enemy_direction = 1.0
-	enemy_step_clock = 0.0
-	core_armor = 3 + stage * 2
+	core_armor = 10 + stage * 4
 	core_max_hp = 44 + stage * 28
 	core_hp = core_max_hp
 	var rows := mini(5, 3 + stage / 2)
 	for row in rows:
 		for column in 7:
 			var durability: int = 2 + row + stage
-			enemies.append({"pos": Vector2(58 + column * 52, 175 + row * 46), "kind": row % 3, "hp": durability, "max_hp": durability, "alive": true, "respawn": 0.0})
+			var evolution := rng.randf() < 0.16
+			enemies.append({"pos": Vector2(58 + column * 52, 175 + row * 46), "kind": row % 3, "hp": durability, "max_hp": durability, "alive": true, "respawn": 0.0, "evolution": evolution})
 
 func begin() -> void:
 	started = true
@@ -60,8 +54,8 @@ func begin() -> void:
 	stage = 1
 	player_damage = 1
 	horizontal_shots = 1
-	charge_multiplier = 3
-	charge_radius = 22.0
+	charge_multiplier = 8
+	charge_radius = 32.0
 	cell_respawn_delay = 4.5
 	player_x = W / 2.0
 	target_x = player_x
@@ -74,33 +68,15 @@ func _process(delta: float) -> void:
 			press_elapsed = min(1.2, press_elapsed + delta)
 		advance_cells(delta)
 		advance_shots(delta)
-		advance_items(delta)
 	queue_redraw()
 
 func advance_cells(delta: float) -> void:
-	enemy_step_clock += delta
-	if enemy_step_clock > max(0.19, 0.52 - stage * 0.025):
-		enemy_step_clock = 0.0
-		var at_edge := false
-		for enemy in enemies:
-			var next_x: float = enemy.pos.x + enemy_direction * 13.0
-			if next_x < 30.0 or next_x > W - 30.0:
-				at_edge = true
-		if at_edge:
-			enemy_direction *= -1.0
-			for enemy in enemies:
-				enemy.pos.y += 18.0
-		else:
-			for enemy in enemies:
-				enemy.pos.x += enemy_direction * 13.0
 	for enemy in enemies:
 		if not enemy.alive:
 			enemy.respawn -= delta
 			if enemy.respawn <= 0.0:
 				enemy.alive = true
 				enemy.hp = enemy.max_hp
-		if enemy.pos.y > BREACH_LINE:
-			game_over = true
 
 func advance_shots(delta: float) -> void:
 	for shot in shots:
@@ -109,54 +85,45 @@ func advance_shots(delta: float) -> void:
 	for shot in shots:
 		var hit := false
 		for enemy in enemies:
-			if enemy.alive and shot.pos.distance_to(enemy.pos) < 18.0 + shot.radius:
+			if enemy.alive and enemy not in shot.hit_enemies and shot.pos.distance_to(enemy.pos) < 18.0 + shot.radius:
 				enemy.hp -= shot.damage
+				shot.hit_enemies.append(enemy)
 				hit = true
 				if enemy.hp <= 0:
 					destroy_cell(enemy)
 				break
-		if not hit and shot.pos.distance_to(Vector2(W / 2.0, 95.0)) < 35.0 + shot.radius:
+		if not shot.hit_core and shot.pos.distance_to(Vector2(W / 2.0, 95.0)) < 35.0 + shot.radius:
 			hit = true
+			shot.hit_core = true
 			if shot.damage >= core_armor:
 				core_hp -= shot.damage
 				if core_hp <= 0:
 					stage += 1
 					setup_stage()
-		if hit:
+		if hit and not shot.charged:
 			shot.pos.y = -100.0
 
 func destroy_cell(enemy: Dictionary) -> void:
 	enemy.alive = false
 	enemy.respawn = cell_respawn_delay
 	score += 10
-	if rng.randf() < 0.18:
-		items.append({"pos": enemy.pos, "phase": rng.randf() * TAU})
-
-func advance_items(delta: float) -> void:
-	for item in items:
-		item.pos.y += 72.0 * delta
-		item.phase += delta * 4.0
-	items = items.filter(func(item): return item.pos.y < H + 30.0)
-	for item in items:
-		if item.pos.distance_to(Vector2(player_x, PLAYER_Y)) < 34.0:
-			items.erase(item)
-			open_upgrades()
-			break
+	if enemy.evolution:
+		open_upgrades()
 
 func fire_normal() -> void:
 	for i in horizontal_shots:
 		var offset := (i - (horizontal_shots - 1) / 2.0) * 16.0
-		shots.append({"pos": Vector2(player_x + offset, PLAYER_Y - 24), "speed": 720.0, "damage": player_damage, "radius": 4.0, "charged": false})
+		shots.append({"pos": Vector2(player_x + offset, PLAYER_Y - 24), "speed": 720.0, "damage": player_damage, "radius": 4.0, "charged": false, "hit_enemies": [], "hit_core": false})
 
 func fire_charged() -> void:
-	shots.append({"pos": Vector2(player_x, PLAYER_Y - 28), "speed": 480.0, "damage": player_damage * charge_multiplier, "radius": charge_radius, "charged": true})
+	shots.append({"pos": Vector2(player_x, PLAYER_Y - 28), "speed": 480.0, "damage": player_damage * charge_multiplier, "radius": charge_radius, "charged": true, "hit_enemies": [], "hit_core": false})
 
 func open_upgrades() -> void:
 	var pool: Array[Dictionary] = [
 		{"id": "damage", "title": "攻撃細胞", "text": "通常弾の火力 +1"},
 		{"id": "split", "title": "横分裂", "text": "同時発射を横方向に +1"},
-		{"id": "charge", "title": "濃縮膜", "text": "溜め弾の火力倍率 +1"},
-		{"id": "radius", "title": "膨張核", "text": "溜め弾の範囲 +8"},
+		{"id": "charge", "title": "濃縮膜", "text": "溜め弾の火力倍率 +2"},
+		{"id": "radius", "title": "膨張核", "text": "溜め弾の範囲 +10"},
 		{"id": "recovery", "title": "再生阻害", "text": "敵の再生まで +1.2秒"}
 	]
 	pool.shuffle()
@@ -169,8 +136,8 @@ func choose_upgrade(index: int) -> void:
 	match upgrade.id:
 		"damage": player_damage += 1
 		"split": horizontal_shots += 1
-		"charge": charge_multiplier += 1
-		"radius": charge_radius += 8.0
+		"charge": charge_multiplier += 2
+		"radius": charge_radius += 10.0
 		"recovery": cell_respawn_delay += 1.2
 	upgrade_open = false
 
@@ -237,20 +204,16 @@ func _draw() -> void:
 	draw_string(GAME_FONT, Vector2(20, 61), "SCORE %05d  FIRE %d" % [score, player_damage], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("8fb7af"))
 	draw_string(GAME_FONT, Vector2(318, 61), "STAGE %02d" % stage, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("8fb7af"))
 	draw_core()
-	draw_line(Vector2(12, BREACH_LINE), Vector2(W - 12, BREACH_LINE), Color("ff7192"), 3)
-	draw_string(GAME_FONT, Vector2(134, BREACH_LINE - 8), "このラインを越えたら培養失敗", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("ff9eaf"))
 	if started:
 		draw_player()
 		for enemy in enemies:
 			draw_enemy(enemy)
-		for item in items:
-			draw_item(item)
 		for shot in shots:
 			draw_shot(shot)
 	if not started:
 		draw_panel("CELL CORE BREAKER", "連打で通常弾、長押しして離すと溜め弾。", "画面をタップして開始")
 	elif game_over:
-		draw_panel("CULTURE LOST", "ライン突破  /  SCORE %d" % score, "画面をタップしてリトライ")
+		draw_panel("CULTURE LOST", "SCORE %d" % score, "画面をタップしてリトライ")
 	elif not upgrade_open:
 		draw_string(GAME_FONT, Vector2(59, 742), "連打: 通常弾   長押し→離す: 範囲溜め弾", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("79a59d"))
 	if upgrade_open:
@@ -283,6 +246,8 @@ func draw_enemy(enemy: Dictionary) -> void:
 		return
 	var colors := [Color("ff7498"), Color("ffcf6d"), Color("9b8cff")]
 	var c: Color = colors[int(enemy.kind)]
+	if enemy.evolution:
+		c = Color("52d7ff")
 	draw_circle(p, 17, c)
 	draw_circle(p + Vector2(-6, -2), 3, Color("07151b"))
 	draw_circle(p + Vector2(6, -2), 3, Color("07151b"))
@@ -290,12 +255,8 @@ func draw_enemy(enemy: Dictionary) -> void:
 	draw_rect(Rect2(p.x - 17, p.y - 27, 34, 4), Color("351d28"))
 	draw_rect(Rect2(p.x - 17, p.y - 27, 34.0 * float(enemy.hp) / enemy.max_hp, 4), Color("aaffca"))
 	draw_string(GAME_FONT, p + Vector2(-16, -32), "HP %d" % enemy.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("eafff5"))
-
-func draw_item(item: Dictionary) -> void:
-	var p: Vector2 = item.pos + Vector2(0, sin(item.phase) * 5.0)
-	draw_circle(p, 13, Color("52d7ff"))
-	draw_circle(p, 7, Color("d9faff"))
-	draw_string(GAME_FONT, p + Vector2(-23, 29), "進化素材", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("99eaff"))
+	if enemy.evolution:
+		draw_string(GAME_FONT, p + Vector2(-24, 34), "進化細胞", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("99eaff"))
 
 func draw_shot(shot: Dictionary) -> void:
 	var color := Color("f5f899") if not shot.charged else Color("ffbd71")
