@@ -14,8 +14,8 @@ var score := 0
 var stage := 1
 var player_damage := 1
 var horizontal_shots := 1
-var charge_multiplier := 8
-var charge_radius := 32.0
+var charge_multiplier := 16
+var charge_radius := 52.0
 var cell_respawn_delay := 4.5
 var core_hp := 0
 var core_max_hp := 0
@@ -54,8 +54,8 @@ func begin() -> void:
 	stage = 1
 	player_damage = 1
 	horizontal_shots = 1
-	charge_multiplier = 8
-	charge_radius = 32.0
+	charge_multiplier = 16
+	charge_radius = 52.0
 	cell_respawn_delay = 4.5
 	player_x = W / 2.0
 	target_x = player_x
@@ -122,8 +122,8 @@ func open_upgrades() -> void:
 	var pool: Array[Dictionary] = [
 		{"id": "damage", "title": "攻撃細胞", "text": "通常弾の火力 +1"},
 		{"id": "split", "title": "横分裂", "text": "同時発射を横方向に +1"},
-		{"id": "charge", "title": "濃縮膜", "text": "溜め弾の火力倍率 +2"},
-		{"id": "radius", "title": "膨張核", "text": "溜め弾の範囲 +10"},
+		{"id": "charge", "title": "濃縮膜", "text": "溜め弾の火力倍率 +4"},
+		{"id": "radius", "title": "膨張核", "text": "溜め弾の範囲 +16"},
 		{"id": "recovery", "title": "再生阻害", "text": "敵の再生まで +1.2秒"}
 	]
 	pool.shuffle()
@@ -136,8 +136,8 @@ func choose_upgrade(index: int) -> void:
 	match upgrade.id:
 		"damage": player_damage += 1
 		"split": horizontal_shots += 1
-		"charge": charge_multiplier += 2
-		"radius": charge_radius += 10.0
+		"charge": charge_multiplier += 4
+		"radius": charge_radius += 16.0
 		"recovery": cell_respawn_delay += 1.2
 	upgrade_open = false
 
