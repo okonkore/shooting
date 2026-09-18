@@ -15,6 +15,8 @@ var wave := 1
 var player_damage := 1
 var fire_interval := 0.32
 var shot_width := 4.0
+var burst_count := 1
+var pending_bursts: Array[float] = []
 var upgrade_open := false
 var upgrade_choices: Array[Dictionary] = []
 var enemies: Array[Dictionary] = []
@@ -51,6 +53,8 @@ func begin() -> void:
 	player_damage = 1
 	fire_interval = 0.32
 	shot_width = 4.0
+	burst_count = 1
+	pending_bursts.clear()
 	upgrade_open = false
 	player_x = W / 2.0
 	target_x = player_x
@@ -59,6 +63,7 @@ func begin() -> void:
 func _process(delta: float) -> void:
 	if started and not game_over and not upgrade_open:
 		player_x = move_toward(player_x, clamp(target_x, 28.0, W - 28.0), 460.0 * delta)
+		advance_pending_bursts(delta)
 		shot_clock -= delta
 		if shot_clock <= 0.0:
 			shoot()
@@ -111,13 +116,25 @@ func advance_shots(delta: float) -> void:
 		spawn_wave()
 
 func shoot() -> void:
+	emit_shot()
+	for i in range(1, burst_count):
+		pending_bursts.append(float(i) * 0.08)
+
+func emit_shot() -> void:
 	shots.append({"pos": Vector2(player_x, PLAYER_Y - 24)})
+
+func advance_pending_bursts(delta: float) -> void:
+	for i in pending_bursts.size():
+		pending_bursts[i] -= delta
+	while not pending_bursts.is_empty() and pending_bursts[0] <= 0.0:
+		emit_shot()
+		pending_bursts.pop_front()
 
 func open_upgrades() -> void:
 	var pool: Array[Dictionary] = [
 		{"id": "damage", "title": "攻撃細胞", "text": "弾丸のダメージ +1"},
 		{"id": "rapid", "title": "高速分裂", "text": "発射間隔を 18% 短縮"},
-		{"id": "multi", "title": "多重核", "text": "連射速度を 30% 強化"},
+		{"id": "multi", "title": "多重核", "text": "1回の発射に追撃弾 +1"},
 		{"id": "pulse", "title": "細胞パルス", "text": "弾丸の幅 +4"},
 		{"id": "overload", "title": "過剰分裂", "text": "連射速度を 45% 強化"}
 	]
@@ -130,7 +147,7 @@ func choose_upgrade(index: int) -> void:
 	match upgrade.id:
 		"damage": player_damage += 1
 		"rapid": fire_interval = max(0.09, fire_interval * 0.82)
-		"multi": fire_interval = max(0.07, fire_interval * 0.70)
+		"multi": burst_count += 1
 		"pulse": shot_width += 4.0
 		"overload": fire_interval = max(0.07, fire_interval * 0.55)
 	upgrade_open = false
