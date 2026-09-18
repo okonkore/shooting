@@ -3,31 +3,26 @@ extends Node2D
 const W := 430.0
 const H := 760.0
 const PLAYER_Y := 675.0
+const BREACH_LINE := 600.0
 const GAME_FONT: Font = preload("res://assets/NotoSansJP-Regular.otf")
 
 var started := false
 var game_over := false
 var player_x := W / 2.0
 var target_x := W / 2.0
-var health := 3
-var max_health := 3
 var score := 0
 var wave := 1
-var level := 1
-var xp := 0
-var next_xp := 18
 var player_damage := 1
 var fire_interval := 0.32
 var projectile_count := 1
+var shot_width := 4.0
 var upgrade_open := false
 var upgrade_choices: Array[Dictionary] = []
 var enemies: Array[Dictionary] = []
 var shots: Array[Dictionary] = []
-var enemy_shots: Array[Dictionary] = []
 var enemy_direction := 1.0
 var enemy_step_clock := 0.0
 var shot_clock := 0.0
-var invader_shot_clock := 0.0
 var touch_active := false
 var rng := RandomNumberGenerator.new()
 
@@ -39,27 +34,25 @@ func _ready() -> void:
 func spawn_wave() -> void:
 	enemies.clear()
 	shots.clear()
-	enemy_shots.clear()
 	enemy_direction = 1.0
 	var rows := mini(5, 3 + wave / 2)
 	for row in rows:
 		for column in 7:
+			var mutant := row == 0 and column == 3
 			var durability := 2 + row + wave / 2
-			enemies.append({"pos": Vector2(58 + column * 52, 130 + row * 46), "kind": row % 3, "hp": durability, "max_hp": durability, "xp": 2 + row})
+			if mutant:
+				durability += 3
+			enemies.append({"pos": Vector2(58 + column * 52, 130 + row * 46), "kind": 3 if mutant else row % 3, "hp": durability, "max_hp": durability, "mutant": mutant})
 
 func begin() -> void:
 	started = true
 	game_over = false
-	health = 3
-	max_health = 3
 	score = 0
 	wave = 1
-	level = 1
-	xp = 0
-	next_xp = 18
 	player_damage = 1
 	fire_interval = 0.32
 	projectile_count = 1
+	shot_width = 4.0
 	upgrade_open = false
 	player_x = W / 2.0
 	target_x = player_x
@@ -93,39 +86,28 @@ func advance_invaders(delta: float) -> void:
 			for enemy in enemies:
 				enemy.pos.x += enemy_direction * 13.0
 	for enemy in enemies:
-		if enemy.pos.y > PLAYER_Y - 42:
-			lose_life()
+		if enemy.pos.y > BREACH_LINE:
+			game_over = true
 			break
-	invader_shot_clock -= delta
-	if invader_shot_clock <= 0.0 and not enemies.is_empty():
-		var shooter: Dictionary = enemies[rng.randi_range(0, enemies.size() - 1)]
-		enemy_shots.append({"pos": shooter.pos + Vector2(0, 14)})
-		invader_shot_clock = max(0.42, 1.15 - wave * 0.05)
 
 func advance_shots(delta: float) -> void:
 	for shot in shots:
 		shot.pos.y -= 680.0 * delta
-	for shot in enemy_shots:
-		shot.pos.y += 320.0 * delta
 	shots = shots.filter(func(shot): return shot.pos.y > -20.0)
-	enemy_shots = enemy_shots.filter(func(shot): return shot.pos.y < H + 20.0)
 	var dead: Array[Dictionary] = []
 	for shot in shots:
 		for enemy in enemies:
-			if enemy not in dead and shot.pos.distance_to(enemy.pos) < 24.0:
+			if enemy not in dead and shot.pos.distance_to(enemy.pos) < 22.0 + shot_width:
 				enemy.hp -= player_damage
 				shot.pos.y = -100.0
 				if enemy.hp <= 0:
 					dead.append(enemy)
 					score += 10
-					gain_xp(enemy.xp)
+					if enemy.mutant:
+						open_upgrades()
 	if not dead.is_empty():
 		for enemy in dead:
 			enemies.erase(enemy)
-	for shot in enemy_shots:
-		if shot.pos.distance_to(Vector2(player_x, PLAYER_Y)) < 27.0:
-			shot.pos.y = H + 100.0
-			lose_life()
 	if enemies.is_empty():
 		wave += 1
 		spawn_wave()
@@ -135,21 +117,13 @@ func shoot() -> void:
 		var offset := (i - (projectile_count - 1) / 2.0) * 13.0
 		shots.append({"pos": Vector2(player_x + offset, PLAYER_Y - 24)})
 
-func gain_xp(amount: int) -> void:
-	xp += amount
-	if xp >= next_xp:
-		xp -= next_xp
-		level += 1
-		next_xp = int(next_xp * 1.35) + 4
-		open_upgrades()
-
 func open_upgrades() -> void:
 	var pool: Array[Dictionary] = [
 		{"id": "damage", "title": "攻撃細胞", "text": "弾丸のダメージ +1"},
 		{"id": "rapid", "title": "高速分裂", "text": "発射間隔を 18% 短縮"},
 		{"id": "multi", "title": "多重核", "text": "同時発射数 +1"},
-		{"id": "repair", "title": "自己修復", "text": "HPを 1 回復"},
-		{"id": "vital", "title": "強靭な膜", "text": "最大HP +1、HPも回復"}
+		{"id": "pulse", "title": "細胞パルス", "text": "弾丸の幅 +4"},
+		{"id": "overload", "title": "過剰分裂", "text": "発射数 +2"}
 	]
 	pool.shuffle()
 	upgrade_choices = [pool[0], pool[1], pool[2]]
@@ -161,17 +135,9 @@ func choose_upgrade(index: int) -> void:
 		"damage": player_damage += 1
 		"rapid": fire_interval = max(0.09, fire_interval * 0.82)
 		"multi": projectile_count += 1
-		"repair": health = min(max_health, health + 1)
-		"vital":
-			max_health += 1
-			health = max_health
+		"pulse": shot_width += 4.0
+		"overload": projectile_count += 2
 	upgrade_open = false
-
-func lose_life() -> void:
-	health -= 1
-	enemy_shots.clear()
-	if health <= 0:
-		game_over = true
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -212,26 +178,22 @@ func _draw() -> void:
 	for y in range(0, int(H), 43):
 		draw_line(Vector2(0, y), Vector2(W, y), Color("12363b"), 1.0)
 	draw_string(GAME_FONT, Vector2(20, 35), "CELL INVADER", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("a6ffcf"))
-	draw_string(GAME_FONT, Vector2(20, 61), "SCORE %05d  LV.%d" % [score, level], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
+	draw_string(GAME_FONT, Vector2(20, 61), "SCORE %05d  DAMAGE %d" % [score, player_damage], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
 	draw_string(GAME_FONT, Vector2(305, 61), "WAVE %02d" % wave, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
-	draw_rect(Rect2(20, 72, 190, 7), Color("17353a"))
-	draw_rect(Rect2(20, 72, 190.0 * float(xp) / next_xp, 7), Color("70eab8"))
-	for heart in health:
-		draw_circle(Vector2(365 + heart * 18, 28), 6, Color("ff6f91"))
+	draw_line(Vector2(12, BREACH_LINE), Vector2(W - 12, BREACH_LINE), Color("ff7192"), 3)
+	draw_string(GAME_FONT, Vector2(144, BREACH_LINE - 8), "このラインを越えたら培養失敗", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("ff9eaf"))
 	if started:
 		draw_player()
 		for enemy in enemies:
 			draw_enemy(enemy)
 		for shot in shots:
-			draw_rect(Rect2(shot.pos - Vector2(2, 12), Vector2(4, 15)), Color("f5f899"))
-		for shot in enemy_shots:
-			draw_rect(Rect2(shot.pos - Vector2(2, 2), Vector2(4, 14)), Color("ff7192"))
+			draw_rect(Rect2(shot.pos - Vector2(shot_width / 2.0, 12), Vector2(shot_width, 15)), Color("f5f899"))
 		if touch_active:
 			draw_line(Vector2(player_x, 724), Vector2(target_x, 724), Color("69e8ba"), 3)
 	if not started:
 		draw_panel("CELL INVADER", "下で左右に動いて、細胞を撃ち落とせ。", "画面をタップして開始")
 	elif game_over:
-		draw_panel("CULTURE LOST", "SCORE %d  /  WAVE %d" % [score, wave], "画面をタップしてリトライ")
+		draw_panel("CULTURE LOST", "ライン突破  /  SCORE %d" % score, "画面をタップしてリトライ")
 	else:
 		draw_string(GAME_FONT, Vector2(70, 742), "画面を横にドラッグして移動", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("79a59d"))
 	if upgrade_open:
@@ -246,7 +208,7 @@ func draw_player() -> void:
 func draw_enemy(enemy: Dictionary) -> void:
 	var p: Vector2 = enemy.pos
 	var kind: int = enemy.kind
-	var colors := [Color("ff7498"), Color("ffcf6d"), Color("9b8cff")]
+	var colors := [Color("ff7498"), Color("ffcf6d"), Color("9b8cff"), Color("d67cff")]
 	var c: Color = colors[kind]
 	draw_circle(p, 17, c)
 	draw_circle(p + Vector2(-6, -2), 3, Color("07151b"))
@@ -254,6 +216,9 @@ func draw_enemy(enemy: Dictionary) -> void:
 	draw_line(p + Vector2(-7, 7), p + Vector2(7, 7), Color("07151b"), 2)
 	draw_rect(Rect2(p.x - 17, p.y - 27, 34, 4), Color("351d28"))
 	draw_rect(Rect2(p.x - 17, p.y - 27, 34.0 * float(enemy.hp) / enemy.max_hp, 4), Color("aaffca"))
+	draw_string(GAME_FONT, p + Vector2(-16, -32), "HP %d" % enemy.hp, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("eafff5"))
+	if enemy.mutant:
+		draw_string(GAME_FONT, p + Vector2(-19, 34), "変異細胞", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("f0aaff"))
 
 func draw_upgrade_panel() -> void:
 	draw_rect(Rect2(18, 185, W - 36, 410), Color("07151bf2"))
