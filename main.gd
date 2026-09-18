@@ -3,6 +3,7 @@ extends Node2D
 const W := 430.0
 const H := 760.0
 const PLAYER_Y := 675.0
+const GAME_FONT: Font = preload("res://assets/NotoSansJP-Regular.otf")
 
 var started := false
 var game_over := false
@@ -140,9 +141,9 @@ func _draw() -> void:
 		draw_line(Vector2(x, 0), Vector2(x, H), Color("12363b"), 1.0)
 	for y in range(0, int(H), 43):
 		draw_line(Vector2(0, y), Vector2(W, y), Color("12363b"), 1.0)
-	draw_string(ThemeDB.fallback_font, Vector2(20, 35), "CELL INVADER", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("a6ffcf"))
-	draw_string(ThemeDB.fallback_font, Vector2(20, 61), "SCORE %05d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
-	draw_string(ThemeDB.fallback_font, Vector2(305, 61), "WAVE %02d" % wave, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
+	draw_string(GAME_FONT, Vector2(20, 35), "CELL INVADER", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("a6ffcf"))
+	draw_string(GAME_FONT, Vector2(20, 61), "SCORE %05d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
+	draw_string(GAME_FONT, Vector2(305, 61), "WAVE %02d" % wave, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("8fb7af"))
 	for heart in health:
 		draw_circle(Vector2(365 + heart * 18, 28), 6, Color("ff6f91"))
 	if started:
@@ -160,7 +161,7 @@ func _draw() -> void:
 	elif game_over:
 		draw_panel("CULTURE LOST", "SCORE %d  /  WAVE %d" % [score, wave], "画面をタップしてリトライ")
 	else:
-		draw_string(ThemeDB.fallback_font, Vector2(70, 742), "画面を横にドラッグして移動", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("79a59d"))
+		draw_string(GAME_FONT, Vector2(70, 742), "画面を横にドラッグして移動", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("79a59d"))
 
 func draw_player() -> void:
 	var p := Vector2(player_x, PLAYER_Y)
@@ -179,7 +180,7 @@ func draw_enemy(p: Vector2, kind: int) -> void:
 func draw_panel(title: String, text: String, action: String) -> void:
 	draw_rect(Rect2(22, 258, W - 44, 210), Color("07151be8"))
 	draw_rect(Rect2(22, 258, W - 44, 210), Color("55cba0"), false, 2)
-	draw_string(ThemeDB.fallback_font, Vector2(55, 322), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 29, Color("b2ffd4"))
-	draw_string(ThemeDB.fallback_font, Vector2(55, 365), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("c3d8d2"))
+	draw_string(GAME_FONT, Vector2(55, 322), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 29, Color("b2ffd4"))
+	draw_string(GAME_FONT, Vector2(55, 365), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("c3d8d2"))
 	draw_rect(Rect2(55, 396, 320, 43), Color("65dca9"))
-	draw_string(ThemeDB.fallback_font, Vector2(95, 423), action, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("07151b"))
+	draw_string(GAME_FONT, Vector2(95, 423), action, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("07151b"))
