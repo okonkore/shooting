@@ -1,11 +1,10 @@
-# Cell Survivor
+# Cell Invader
 
-ブラウザだけで動くセルサバイバー型ゲームです。敵へ自動射撃しながら経験値を集め、変異を選んで生き残ります。
+Godot 4製の、画面下を左右に動くだけのインベーダー型シューティングです。
 
 ## 操作
 
-- PC: `WASD` または矢印キーで移動
-- iPhone / iPad: ゲーム画面をドラッグして移動
+- PC: クリック／ドラッグで左右に移動
+- iPhone / iPad: 画面を横へドラッグして移動
 
-静的なHTML/CSS/JavaScriptのみで構成しているため、GitHub Pagesでそのまま公開できます。
-
+`project.godot` をGodot 4.7以降で開き、Webにエクスポートします。
