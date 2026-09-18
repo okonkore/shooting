@@ -69,7 +69,7 @@ func _process(delta: float) -> void:
 		shot_clock -= delta
 		if shot_clock <= 0.0:
 			shoot()
-			shot_clock = fire_interval
+			shot_clock = effective_fire_interval()
 		advance_invaders(delta)
 		advance_shots(delta)
 	queue_redraw()
@@ -133,6 +133,10 @@ func advance_pending_bursts(delta: float) -> void:
 	while not pending_bursts.is_empty() and pending_bursts[0] <= 0.0:
 		emit_shot()
 		pending_bursts.pop_front()
+
+func effective_fire_interval() -> float:
+	# 次の通常射撃は、時間差の追撃弾がすべて出た後にだけ始める。
+	return max(fire_interval, float(burst_count - 1) * 0.08 + 0.09)
 
 func open_upgrades() -> void:
 	var pool: Array[Dictionary] = [
